@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pymongo
+python-dotenv
+pydantic
+python-multipart
+fastapi-cors
+python-jose[cryptography]
+passlib[bcrypt]
+google-genai

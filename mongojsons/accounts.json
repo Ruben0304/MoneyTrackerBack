@@ -1,0 +1,47 @@
+[
+  {
+    "user_id": "REPLACE_WITH_USER_ID_1",
+    "name": "Billetera USD",
+    "type": "billetera",
+    "balance": 500.00,
+    "currency": "USD",
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z"
+  },
+  {
+    "user_id": "REPLACE_WITH_USER_ID_1",
+    "name": "Billetera CUP",
+    "type": "billetera",
+    "balance": 15000.00,
+    "currency": "CUP",
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z"
+  },
+  {
+    "user_id": "REPLACE_WITH_USER_ID_1",
+    "name": "Tarjeta de Crédito",
+    "type": "tarjeta",
+    "balance": 1000.00,
+    "currency": "USD",
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z"
+  },
+  {
+    "user_id": "REPLACE_WITH_USER_ID_1",
+    "name": "Cuenta de Ahorros",
+    "type": "ahorro",
+    "balance": 2000.00,
+    "currency": "USD",
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z"
+  },
+  {
+    "user_id": "REPLACE_WITH_USER_ID_2",
+    "name": "Mi Billetera",
+    "type": "billetera",
+    "balance": 300.00,
+    "currency": "USD",
+    "created_at": "2024-01-02T10:30:00Z",
+    "updated_at": "2024-01-02T10:30:00Z"
+  }
+]

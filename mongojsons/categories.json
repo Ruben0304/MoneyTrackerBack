@@ -1,0 +1,98 @@
+[
+  {
+    "name": "Comida",
+    "icon": "🍽️",
+    "color": "bg-orange-100 text-orange-800",
+    "type": "expense"
+  },
+  {
+    "name": "Transporte",
+    "icon": "🚗",
+    "color": "bg-blue-100 text-blue-800",
+    "type": "expense"
+  },
+  {
+    "name": "Entretenimiento",
+    "icon": "🎬",
+    "color": "bg-purple-100 text-purple-800",
+    "type": "expense"
+  },
+  {
+    "name": "Salud",
+    "icon": "🏥",
+    "color": "bg-red-100 text-red-800",
+    "type": "expense"
+  },
+  {
+    "name": "Educación",
+    "icon": "📚",
+    "color": "bg-green-100 text-green-800",
+    "type": "expense"
+  },
+  {
+    "name": "Ropa",
+    "icon": "👕",
+    "color": "bg-pink-100 text-pink-800",
+    "type": "expense"
+  },
+  {
+    "name": "Hogar",
+    "icon": "🏠",
+    "color": "bg-yellow-100 text-yellow-800",
+    "type": "expense"
+  },
+  {
+    "name": "Servicios",
+    "icon": "⚡",
+    "color": "bg-indigo-100 text-indigo-800",
+    "type": "expense"
+  },
+  {
+    "name": "Otros",
+    "icon": "📦",
+    "color": "bg-gray-100 text-gray-800",
+    "type": "expense"
+  },
+  {
+    "name": "Salario",
+    "icon": "💼",
+    "color": "bg-green-100 text-green-800",
+    "type": "income"
+  },
+  {
+    "name": "Freelance",
+    "icon": "💻",
+    "color": "bg-blue-100 text-blue-800",
+    "type": "income"
+  },
+  {
+    "name": "Inversión",
+    "icon": "📈",
+    "color": "bg-purple-100 text-purple-800",
+    "type": "income"
+  },
+  {
+    "name": "Regalo",
+    "icon": "🎁",
+    "color": "bg-pink-100 text-pink-800",
+    "type": "income"
+  },
+  {
+    "name": "Venta",
+    "icon": "🏷️",
+    "color": "bg-orange-100 text-orange-800",
+    "type": "income"
+  },
+  {
+    "name": "Reembolso",
+    "icon": "💰",
+    "color": "bg-yellow-100 text-yellow-800",
+    "type": "income"
+  },
+  {
+    "name": "Otros",
+    "icon": "📦",
+    "color": "bg-gray-100 text-gray-800",
+    "type": "income"
+  }
+]
