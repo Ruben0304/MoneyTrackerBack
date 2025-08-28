@@ -16,6 +16,9 @@ accounts_collection = database.get_collection("accounts")
 transactions_collection = database.get_collection("transactions")
 categories_collection = database.get_collection("categories")
 budgets_collection = database.get_collection("budgets")
+income_presets_collection = database.get_collection("income_presets")
+expense_presets_collection = database.get_collection("expense_presets")
+auto_savings_collection = database.get_collection("auto_savings")
 
 def get_database():
     return database

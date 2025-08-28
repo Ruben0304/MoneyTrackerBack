@@ -172,3 +172,100 @@ class BudgetUpdate(BaseModel):
     current_amount: Optional[float] = None
     description: Optional[str] = None
     is_completed: Optional[bool] = None
+
+class IncomePreset(BaseModel):
+    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
+    user_id: str
+    name: str
+    amount: float
+    category: str
+    description: Optional[str] = None
+    collect_day: Optional[int] = None
+    currency: Literal["USD", "CUP"]
+    account_id: str
+    is_active: bool = True
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    class Config:
+        populate_by_name = True
+        arbitrary_types_allowed = True
+        json_encoders = {ObjectId: str}
+
+class ExpensePreset(BaseModel):
+    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
+    user_id: str
+    name: str
+    amount: float
+    category: str
+    description: Optional[str] = None
+    due_day: Optional[int] = None
+    currency: Literal["USD", "CUP"]
+    account_id: str
+    is_active: bool = True
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    class Config:
+        populate_by_name = True
+        arbitrary_types_allowed = True
+        json_encoders = {ObjectId: str}
+
+class AutoSavings(BaseModel):
+    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
+    user_id: str
+    percentage: float = 30.0
+    savings_account_id: str
+    is_active: bool = True
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    class Config:
+        populate_by_name = True
+        arbitrary_types_allowed = True
+        json_encoders = {ObjectId: str}
+
+class IncomePresetCreate(BaseModel):
+    name: str
+    amount: float
+    category: str
+    description: Optional[str] = None
+    collect_day: Optional[int] = None
+    currency: Literal["USD", "CUP"]
+    account_id: str
+
+class ExpensePresetCreate(BaseModel):
+    name: str
+    amount: float
+    category: str
+    description: Optional[str] = None
+    due_day: Optional[int] = None
+    currency: Literal["USD", "CUP"]
+    account_id: str
+
+class AutoSavingsCreate(BaseModel):
+    percentage: float = 30.0
+    savings_account_id: str
+
+class IncomePresetUpdate(BaseModel):
+    name: Optional[str] = None
+    amount: Optional[float] = None
+    category: Optional[str] = None
+    description: Optional[str] = None
+    collect_day: Optional[int] = None
+    account_id: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class ExpensePresetUpdate(BaseModel):
+    name: Optional[str] = None
+    amount: Optional[float] = None
+    category: Optional[str] = None
+    description: Optional[str] = None
+    due_day: Optional[int] = None
+    account_id: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class AutoSavingsUpdate(BaseModel):
+    percentage: Optional[float] = None
+    savings_account_id: Optional[str] = None
+    is_active: Optional[bool] = None

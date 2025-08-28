@@ -1,0 +1,10 @@
+[
+  {
+    "user_id": "REPLACE_WITH_USER_ID",
+    "percentage": 30.0,
+    "savings_account_id": "REPLACE_WITH_SAVINGS_ACCOUNT_ID",
+    "is_active": true,
+    "created_at": "2024-01-15T10:00:00.000Z",
+    "updated_at": "2024-01-15T10:00:00.000Z"
+  }
+]

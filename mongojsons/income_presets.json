@@ -1,0 +1,28 @@
+[
+  {
+    "user_id": "REPLACE_WITH_USER_ID",
+    "name": "Salario EnterpriseSun",
+    "amount": 1500.00,
+    "category": "salario",
+    "description": "Salario quincenal de la empresa EnterpriseSun",
+    "collect_day": 15,
+    "currency": "USD",
+    "account_id": "REPLACE_WITH_ACCOUNT_ID",
+    "is_active": true,
+    "created_at": "2024-01-15T10:00:00.000Z",
+    "updated_at": "2024-01-15T10:00:00.000Z"
+  },
+  {
+    "user_id": "REPLACE_WITH_USER_ID",
+    "name": "Freelance Proyecto Web",
+    "amount": 800.00,
+    "category": "freelance",
+    "description": "Pago por proyecto de desarrollo web",
+    "collect_day": null,
+    "currency": "USD",
+    "account_id": "REPLACE_WITH_ACCOUNT_ID",
+    "is_active": true,
+    "created_at": "2024-01-15T10:00:00.000Z",
+    "updated_at": "2024-01-15T10:00:00.000Z"
+  }
+]

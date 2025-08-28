@@ -26,6 +26,9 @@ mongoimport --db moneyapp --collection users --file mongojsons/users.json --json
 mongoimport --db moneyapp --collection accounts --file mongojsons/accounts.json --jsonArray
 mongoimport --db moneyapp --collection transactions --file mongojsons/transactions.json --jsonArray
 mongoimport --db moneyapp --collection budgets --file mongojsons/budgets.json --jsonArray
+mongoimport --db moneyapp --collection income_presets --file mongojsons/income_presets.json --jsonArray
+mongoimport --db moneyapp --collection expense_presets --file mongojsons/expense_presets.json --jsonArray
+mongoimport --db moneyapp --collection auto_savings --file mongojsons/auto_savings.json --jsonArray
 ```
 
 ## Architecture Overview
@@ -49,6 +52,9 @@ mongoimport --db moneyapp --collection budgets --file mongojsons/budgets.json --
 - **Transactions**: Income, expense, and transfer records with category linking
 - **Categories**: Predefined income/expense categories with icons and colors
 - **Budgets**: Savings goals with progress tracking
+- **Income Presets**: Predefined income transactions (salaries, freelance work, etc.)
+- **Expense Presets**: Predefined expense transactions (rent, utilities, etc.)
+- **Auto Savings**: User settings for automatic savings on income
 
 ### Environment Configuration
 Required environment variables (see .env):
@@ -69,6 +75,9 @@ All routes are prefixed with `/api`:
 - `/api/transactions/*`: Transaction management
 - `/api/categories/*`: Category listing
 - `/api/budgets/*`: Budget tracking
+- `/api/income-presets/*`: Income presets management
+- `/api/expense-presets/*`: Expense presets management
+- `/api/auto-savings/*`: Auto savings configuration
 
 ### Security Features
 - JWT token authentication with Bearer scheme
