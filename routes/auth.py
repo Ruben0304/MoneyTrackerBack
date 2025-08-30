@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 from datetime import datetime
 from models import UserCreate, UserLogin, TokenResponse, RefreshTokenRequest, UserUpdate
-from database import users_collection
+from repositories.user_repository import user_repository
 from auth import AuthService, get_current_active_user, user_helper
 from bson import ObjectId
 
@@ -20,7 +20,7 @@ def get_ai_limits_by_role(role: str) -> dict:
 async def register(user_data: UserCreate):
     """Register a new user"""
     # Check if user already exists
-    existing_user = users_collection.find_one({"email": user_data.email})
+    existing_user = await user_repository.find_by_email(user_data.email)
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -44,8 +44,8 @@ async def register(user_data: UserCreate):
     }
     
     # Insert user
-    result = users_collection.insert_one(user_dict)
-    new_user = users_collection.find_one({"_id": result.inserted_id})
+    user_id = await user_repository.create(user_dict)
+    new_user = await user_repository.find_by_id(user_id)
     
     # Create tokens
     user_id = str(new_user["_id"])
@@ -63,7 +63,7 @@ async def register(user_data: UserCreate):
 @router.post("/login", response_model=TokenResponse)
 async def login(user_credentials: UserLogin):
     """Login user"""
-    user = AuthService.authenticate_user(user_credentials.email, user_credentials.password)
+    user = await AuthService.authenticate_user(user_credentials.email, user_credentials.password)
     
     if not user:
         raise HTTPException(
@@ -100,7 +100,7 @@ async def refresh_token(refresh_data: RefreshTokenRequest):
         user_id = payload.get("sub")
         
         # Get user
-        user = AuthService.get_user_by_id(user_id)
+        user = await AuthService.get_user_by_id(user_id)
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -160,10 +160,11 @@ async def update_current_user(
     
     # Check if email is being changed and if it's already taken
     if "email" in update_data:
-        existing_user = users_collection.find_one({
-            "email": update_data["email"],
-            "_id": {"$ne": current_user["_id"]}
-        })
+        existing_user = await user_repository.find_by_email(update_data["email"])
+        if existing_user and str(existing_user["_id"]) != str(current_user["_id"]):
+            existing_user = existing_user
+        else:
+            existing_user = None
         if existing_user:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -173,13 +174,11 @@ async def update_current_user(
     update_data["updated_at"] = datetime.utcnow()
     
     # Update user
-    result = users_collection.update_one(
-        {"_id": current_user["_id"]},
-        {"$set": update_data}
-    )
+    user_id = str(current_user["_id"])
+    success = await user_repository.update_by_id(user_id, update_data)
     
-    if result.modified_count == 1:
-        updated_user = users_collection.find_one({"_id": current_user["_id"]})
+    if success:
+        updated_user = await user_repository.find_by_id(user_id)
         return user_helper(updated_user)
     
     raise HTTPException(
@@ -220,13 +219,7 @@ async def increment_ai_usage(current_user: dict = Depends(get_current_active_use
         )
     
     # Increment usage
-    users_collection.update_one(
-        {"_id": current_user["_id"]},
-        {
-            "$inc": {"ai_requests_used": 1},
-            "$set": {"updated_at": datetime.utcnow()}
-        }
-    )
+    await user_repository.increment_ai_requests(str(current_user["_id"]))
     
     return {
         "requests_used": current_used + 1,

@@ -4,9 +4,7 @@ from typing import Optional
 import sys
 import os
 
-# Add parent directory to path to import gemini_chat
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-from gemini_chat import conversar
+from external_services import conversar
 
 router = APIRouter()
 

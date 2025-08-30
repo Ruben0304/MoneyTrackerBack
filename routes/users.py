@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 from typing import List
 from models import User, UserCreate, UserLogin, UserUpdate
-from database import users_collection
+from repositories.user_repository import user_repository
 from auth import get_current_active_user, user_helper, require_role
 from bson import ObjectId
 from datetime import datetime
@@ -13,10 +13,8 @@ router = APIRouter(prefix="/users", tags=["users"])
 @router.get("/", response_model=List[dict])
 async def get_users(current_user: dict = Depends(require_role(["max"]))):
     """Get all users - only max role can access"""
-    users = []
-    for user in users_collection.find():
-        users.append(user_helper(user))
-    return users
+    users = await user_repository.find_all()
+    return [user_helper(user) for user in users]
 
 @router.get("/{user_id}")
 async def get_user(user_id: str, current_user: dict = Depends(get_current_active_user)):
@@ -34,7 +32,7 @@ async def get_user(user_id: str, current_user: dict = Depends(get_current_active
             detail="Access denied"
         )
     
-    user = users_collection.find_one({"_id": ObjectId(user_id)})
+    user = await user_repository.find_by_id(user_id)
     if user:
         return user_helper(user)
     raise HTTPException(
@@ -65,13 +63,10 @@ async def update_user(
     update_data = user_update.dict(exclude_unset=True)
     update_data["updated_at"] = datetime.utcnow()
     
-    result = users_collection.update_one(
-        {"_id": ObjectId(user_id)}, 
-        {"$set": update_data}
-    )
+    success = await user_repository.update_by_id(user_id, update_data)
     
-    if result.modified_count == 1:
-        updated_user = users_collection.find_one({"_id": ObjectId(user_id)})
+    if success:
+        updated_user = await user_repository.find_by_id(user_id)
         return user_helper(updated_user)
     
     raise HTTPException(
@@ -88,8 +83,8 @@ async def delete_user(user_id: str, current_user: dict = Depends(require_role(["
             detail="Invalid user ID"
         )
     
-    result = users_collection.delete_one({"_id": ObjectId(user_id)})
-    if result.deleted_count == 1:
+    success = await user_repository.delete_by_id(user_id)
+    if success:
         return {"message": "User deleted successfully"}
     
     raise HTTPException(

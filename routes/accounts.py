@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 from typing import List
 from models import Account, AccountCreate, AccountUpdate
-from database import accounts_collection
+from repositories.account_repository import account_repository
 from auth import get_current_active_user
 from bson import ObjectId
 from datetime import datetime
@@ -32,18 +32,16 @@ async def create_account(account: AccountCreate, current_user: dict = Depends(ge
         "updated_at": datetime.utcnow()
     }
     
-    result = accounts_collection.insert_one(account_dict)
-    new_account = accounts_collection.find_one({"_id": result.inserted_id})
+    account_id = await account_repository.create(account_dict)
+    new_account = await account_repository.find_by_id(account_id)
     return account_helper(new_account)
 
 @router.get("/", response_model=List[dict])
 async def get_user_accounts(current_user: dict = Depends(get_current_active_user)):
     """Get all accounts for the authenticated user"""
     user_id = str(current_user["_id"])
-    accounts = []
-    for account in accounts_collection.find({"user_id": user_id}):
-        accounts.append(account_helper(account))
-    return accounts
+    accounts = await account_repository.find_by_user_id(user_id)
+    return [account_helper(account) for account in accounts]
 
 @router.get("/{account_id}")
 async def get_account(account_id: str, current_user: dict = Depends(get_current_active_user)):
@@ -53,7 +51,8 @@ async def get_account(account_id: str, current_user: dict = Depends(get_current_
             detail="Invalid account ID"
         )
     
-    account = accounts_collection.find_one({"_id": ObjectId(account_id), "user_id": str(current_user["_id"])})
+    user_id = str(current_user["_id"])
+    account = await account_repository.find_one_by_filter({"_id": ObjectId(account_id), "user_id": user_id})
     if account:
         return account_helper(account)
     raise HTTPException(
@@ -72,18 +71,24 @@ async def update_account(account_id: str, account_update: AccountUpdate, current
     update_data = account_update.dict(exclude_unset=True)
     update_data["updated_at"] = datetime.utcnow()
     
-    result = accounts_collection.update_one(
-        {"_id": ObjectId(account_id), "user_id": str(current_user["_id"])}, 
-        {"$set": update_data}
-    )
+    user_id = str(current_user["_id"])
+    # Check if account exists and belongs to user
+    existing_account = await account_repository.find_one_by_filter({"_id": ObjectId(account_id), "user_id": user_id})
+    if not existing_account:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Account not found"
+        )
     
-    if result.modified_count == 1:
-        updated_account = accounts_collection.find_one({"_id": ObjectId(account_id)})
+    success = await account_repository.update_by_id(account_id, update_data)
+    
+    if success:
+        updated_account = await account_repository.find_by_id(account_id)
         return account_helper(updated_account)
     
     raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="Account not found"
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Failed to update account"
     )
 
 @router.delete("/{account_id}")
@@ -94,11 +99,20 @@ async def delete_account(account_id: str, current_user: dict = Depends(get_curre
             detail="Invalid account ID"
         )
     
-    result = accounts_collection.delete_one({"_id": ObjectId(account_id), "user_id": str(current_user["_id"])})
-    if result.deleted_count == 1:
+    user_id = str(current_user["_id"])
+    # Check if account exists and belongs to user
+    existing_account = await account_repository.find_one_by_filter({"_id": ObjectId(account_id), "user_id": user_id})
+    if not existing_account:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Account not found"
+        )
+    
+    success = await account_repository.delete_by_id(account_id)
+    if success:
         return {"message": "Account deleted successfully"}
     
     raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="Account not found"
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Failed to delete account"
     )

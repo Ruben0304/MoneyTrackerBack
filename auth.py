@@ -6,7 +6,7 @@ from passlib.context import CryptContext
 from fastapi import HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
-from database import users_collection
+from repositories.user_repository import user_repository
 from bson import ObjectId
 
 load_dotenv()
@@ -86,9 +86,9 @@ class AuthService:
             )
     
     @staticmethod
-    def authenticate_user(email: str, password: str):
+    async def authenticate_user(email: str, password: str):
         """Authenticate user credentials"""
-        user = users_collection.find_one({"email": email})
+        user = await user_repository.find_by_email(email)
         if not user:
             return False
         if not AuthService.verify_password(password, user["password_hash"]):
@@ -96,14 +96,14 @@ class AuthService:
         return user
     
     @staticmethod
-    def get_user_by_id(user_id: str):
+    async def get_user_by_id(user_id: str):
         """Get user by ID"""
         if not ObjectId.is_valid(user_id):
             return None
-        return users_collection.find_one({"_id": ObjectId(user_id)})
+        return await user_repository.find_by_id(user_id)
 
 # Dependency to get current user
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """Dependency to get current authenticated user"""
     token = credentials.credentials
     
@@ -124,7 +124,7 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    user = AuthService.get_user_by_id(user_id)
+    user = await AuthService.get_user_by_id(user_id)
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

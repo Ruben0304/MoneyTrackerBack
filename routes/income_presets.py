@@ -7,10 +7,10 @@ from models import (
     IncomePreset, IncomePresetCreate, IncomePresetUpdate,
     TransactionCreate, Transaction
 )
-from database import (
-    income_presets_collection, transactions_collection, 
-    accounts_collection, auto_savings_collection
-)
+from repositories.income_preset_repository import income_preset_repository
+from repositories.transaction_repository import transaction_repository
+from repositories.account_repository import account_repository
+from repositories.auto_savings_repository import auto_savings_repository
 from auth import get_current_user
 
 router = APIRouter()
@@ -25,9 +25,9 @@ async def create_income_preset(
     income_preset_dict["created_at"] = datetime.utcnow()
     income_preset_dict["updated_at"] = datetime.utcnow()
     
-    result = income_presets_collection.insert_one(income_preset_dict)
+    preset_id = await income_preset_repository.create(income_preset_dict)
     
-    created_preset = income_presets_collection.find_one({"_id": result.inserted_id})
+    created_preset = await income_preset_repository.find_by_id(preset_id)
     created_preset["id"] = str(created_preset["_id"])
     created_preset.pop("_id")
     
@@ -35,7 +35,7 @@ async def create_income_preset(
 
 @router.get("/", response_model=dict)
 async def get_income_presets(current_user: dict = Depends(get_current_user)):
-    presets = list(income_presets_collection.find({"user_id": str(current_user["_id"])}))
+    presets = await income_preset_repository.find_by_user_id(str(current_user["_id"]))
     
     for preset in presets:
         preset["id"] = str(preset["_id"])
@@ -51,7 +51,7 @@ async def get_income_preset(
     if not ObjectId.is_valid(preset_id):
         raise HTTPException(status_code=400, detail="Invalid preset ID")
     
-    preset = income_presets_collection.find_one({
+    preset = await income_preset_repository.find_one_by_filter({
         "_id": ObjectId(preset_id),
         "user_id": str(current_user["_id"])
     })
@@ -79,13 +79,16 @@ async def update_income_preset(
     
     update_data["updated_at"] = datetime.utcnow()
     
-    result = income_presets_collection.update_one(
-        {"_id": ObjectId(preset_id), "user_id": str(current_user["_id"])},
-        {"$set": update_data}
-    )
+    # Check if preset exists and belongs to user
+    existing_preset = await income_preset_repository.find_one_by_filter({
+        "_id": ObjectId(preset_id), 
+        "user_id": str(current_user["_id"])
+    })
     
-    if result.matched_count == 0:
+    if not existing_preset:
         raise HTTPException(status_code=404, detail="Income preset not found")
+    
+    await income_preset_repository.update_by_id(preset_id, update_data)
     
     return {"message": "Income preset updated successfully"}
 
@@ -97,13 +100,16 @@ async def delete_income_preset(
     if not ObjectId.is_valid(preset_id):
         raise HTTPException(status_code=400, detail="Invalid preset ID")
     
-    result = income_presets_collection.delete_one({
-        "_id": ObjectId(preset_id),
+    # Check if preset exists and belongs to user
+    existing_preset = await income_preset_repository.find_one_by_filter({
+        "_id": ObjectId(preset_id), 
         "user_id": str(current_user["_id"])
     })
     
-    if result.deleted_count == 0:
+    if not existing_preset:
         raise HTTPException(status_code=404, detail="Income preset not found")
+    
+    await income_preset_repository.delete_by_id(preset_id)
     
     return {"message": "Income preset deleted successfully"}
 
@@ -115,7 +121,7 @@ async def use_income_preset(
     if not ObjectId.is_valid(preset_id):
         raise HTTPException(status_code=400, detail="Invalid preset ID")
     
-    preset = income_presets_collection.find_one({
+    preset = await income_preset_repository.find_one_by_filter({
         "_id": ObjectId(preset_id),
         "user_id": str(current_user["_id"])
     })
@@ -126,7 +132,7 @@ async def use_income_preset(
     if not preset.get("is_active", True):
         raise HTTPException(status_code=400, detail="Income preset is not active")
     
-    account = accounts_collection.find_one({
+    account = await account_repository.find_one_by_filter({
         "_id": ObjectId(preset["account_id"]),
         "user_id": str(current_user["_id"])
     })
@@ -147,19 +153,19 @@ async def use_income_preset(
     transaction_dict["date"] = datetime.utcnow()
     transaction_dict["currency"] = preset["currency"]
     
-    result = transactions_collection.insert_one(transaction_dict)
+    transaction_id = await transaction_repository.create(transaction_dict)
     
     new_balance = account["balance"] + preset["amount"]
-    accounts_collection.update_one(
-        {"_id": ObjectId(preset["account_id"])},
-        {"$set": {"balance": new_balance, "updated_at": datetime.utcnow()}}
-    )
+    await account_repository.update_by_id(preset["account_id"], {
+        "balance": new_balance, 
+        "updated_at": datetime.utcnow()
+    })
     
-    created_transaction = transactions_collection.find_one({"_id": result.inserted_id})
+    created_transaction = await transaction_repository.find_by_id(transaction_id)
     created_transaction["id"] = str(created_transaction["_id"])
     created_transaction.pop("_id")
     
-    auto_savings_settings = auto_savings_collection.find_one({
+    auto_savings_settings = await auto_savings_repository.find_one_by_filter({
         "user_id": str(current_user["_id"]),
         "is_active": True
     })
@@ -168,7 +174,7 @@ async def use_income_preset(
     if auto_savings_settings:
         savings_amount = preset["amount"] * (auto_savings_settings["percentage"] / 100)
         
-        savings_account = accounts_collection.find_one({
+        savings_account = await account_repository.find_one_by_filter({
             "_id": ObjectId(auto_savings_settings["savings_account_id"]),
             "user_id": str(current_user["_id"])
         })
@@ -187,19 +193,19 @@ async def use_income_preset(
                     "transfer_to_account_id": auto_savings_settings["savings_account_id"]
                 }
                 
-                savings_result = transactions_collection.insert_one(savings_transaction_data)
+                savings_transaction_id = await transaction_repository.create(savings_transaction_data)
                 
-                accounts_collection.update_one(
-                    {"_id": ObjectId(preset["account_id"])},
-                    {"$set": {"balance": new_balance - savings_amount, "updated_at": datetime.utcnow()}}
-                )
+                await account_repository.update_by_id(preset["account_id"], {
+                    "balance": new_balance - savings_amount, 
+                    "updated_at": datetime.utcnow()
+                })
                 
-                accounts_collection.update_one(
-                    {"_id": ObjectId(auto_savings_settings["savings_account_id"])},
-                    {"$set": {"balance": savings_account["balance"] + savings_amount, "updated_at": datetime.utcnow()}}
-                )
+                await account_repository.update_by_id(auto_savings_settings["savings_account_id"], {
+                    "balance": savings_account["balance"] + savings_amount, 
+                    "updated_at": datetime.utcnow()
+                })
                 
-                savings_transaction = transactions_collection.find_one({"_id": savings_result.inserted_id})
+                savings_transaction = await transaction_repository.find_by_id(savings_transaction_id)
                 savings_transaction["id"] = str(savings_transaction["_id"])
                 savings_transaction.pop("_id")
     

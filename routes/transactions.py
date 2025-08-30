@@ -1,7 +1,8 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 from typing import List, Optional
 from models import Transaction, TransactionCreate
-from database import transactions_collection, accounts_collection
+from repositories.transaction_repository import transaction_repository
+from repositories.account_repository import account_repository
 from auth import get_current_active_user
 from bson import ObjectId
 from datetime import datetime
@@ -25,21 +26,17 @@ def transaction_helper(transaction) -> dict:
 async def update_account_balance(account_id: str, amount: float, operation: str):
     """Update account balance based on transaction type"""
     if operation == "add":
-        accounts_collection.update_one(
-            {"_id": ObjectId(account_id)},
-            {"$inc": {"balance": amount}, "$set": {"updated_at": datetime.utcnow()}}
-        )
+        await account_repository.increment_balance(account_id, amount)
+        await account_repository.update_by_id(account_id, {"updated_at": datetime.utcnow()})
     elif operation == "subtract":
-        accounts_collection.update_one(
-            {"_id": ObjectId(account_id)},
-            {"$inc": {"balance": -amount}, "$set": {"updated_at": datetime.utcnow()}}
-        )
+        await account_repository.increment_balance(account_id, -amount)
+        await account_repository.update_by_id(account_id, {"updated_at": datetime.utcnow()})
 
 @router.post("/", response_model=dict)
 async def create_transaction(transaction: TransactionCreate, current_user: dict = Depends(get_current_active_user)):
     # Verify account exists and belongs to user
     user_id = str(current_user["_id"])
-    account = accounts_collection.find_one({"_id": ObjectId(transaction.account_id), "user_id": user_id})
+    account = await account_repository.find_one_by_filter({"_id": ObjectId(transaction.account_id), "user_id": user_id})
     if not account:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -75,7 +72,7 @@ async def create_transaction(transaction: TransactionCreate, current_user: dict 
                 detail="Transfer destination account is required"
             )
         
-        to_account = accounts_collection.find_one({
+        to_account = await account_repository.find_one_by_filter({
             "_id": ObjectId(transaction.transfer_to_account_id), 
             "user_id": user_id
         })
@@ -100,36 +97,32 @@ async def create_transaction(transaction: TransactionCreate, current_user: dict 
         await update_account_balance(transaction.account_id, transaction.amount, "subtract")
         await update_account_balance(transaction.transfer_to_account_id, transaction.amount, "add")
     
-    result = transactions_collection.insert_one(transaction_dict)
-    new_transaction = transactions_collection.find_one({"_id": result.inserted_id})
+    transaction_id = await transaction_repository.create(transaction_dict)
+    new_transaction = await transaction_repository.find_by_id(transaction_id)
     return transaction_helper(new_transaction)
 
 @router.get("/", response_model=List[dict])
 async def get_user_transactions(current_user: dict = Depends(get_current_active_user), limit: Optional[int] = 50, offset: Optional[int] = 0):
     """Get all transactions for the authenticated user"""
     user_id = str(current_user["_id"])
-    transactions = []
-    cursor = transactions_collection.find({"user_id": user_id}).sort("date", -1).skip(offset).limit(limit)
-    for transaction in cursor:
-        transactions.append(transaction_helper(transaction))
-    return transactions
+    # Use direct collection query with pagination
+    transactions = list(transaction_repository.collection.find({"user_id": user_id}).sort("date", -1).skip(offset).limit(limit))
+    return [transaction_helper(transaction) for transaction in transactions]
 
 @router.get("/account/{account_id}", response_model=List[dict])
 async def get_account_transactions(account_id: str, current_user: dict = Depends(get_current_active_user), limit: Optional[int] = 50):
     """Get transactions for a specific account (must belong to authenticated user)"""
     # Verify account belongs to user
-    account = accounts_collection.find_one({"_id": ObjectId(account_id), "user_id": str(current_user["_id"])})
+    account = await account_repository.find_one_by_filter({"_id": ObjectId(account_id), "user_id": str(current_user["_id"])})
     if not account:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Account not found"
         )
     
-    transactions = []
-    cursor = transactions_collection.find({"account_id": account_id, "user_id": str(current_user["_id"])}).sort("date", -1).limit(limit)
-    for transaction in cursor:
-        transactions.append(transaction_helper(transaction))
-    return transactions
+    # Use direct collection query with pagination
+    transactions = list(transaction_repository.collection.find({"account_id": account_id, "user_id": str(current_user["_id"])}).sort("date", -1).limit(limit))
+    return [transaction_helper(transaction) for transaction in transactions]
 
 @router.get("/{transaction_id}")
 async def get_transaction(transaction_id: str, current_user: dict = Depends(get_current_active_user)):
@@ -139,7 +132,7 @@ async def get_transaction(transaction_id: str, current_user: dict = Depends(get_
             detail="Invalid transaction ID"
         )
     
-    transaction = transactions_collection.find_one({"_id": ObjectId(transaction_id), "user_id": str(current_user["_id"])})
+    transaction = await transaction_repository.find_one_by_filter({"_id": ObjectId(transaction_id), "user_id": str(current_user["_id"])})
     if transaction:
         return transaction_helper(transaction)
     raise HTTPException(
@@ -157,7 +150,7 @@ async def delete_transaction(transaction_id: str, current_user: dict = Depends(g
     
     # Get transaction to reverse balance changes
     user_id = str(current_user["_id"])
-    transaction = transactions_collection.find_one({"_id": ObjectId(transaction_id), "user_id": user_id})
+    transaction = await transaction_repository.find_one_by_filter({"_id": ObjectId(transaction_id), "user_id": user_id})
     if not transaction:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -174,8 +167,8 @@ async def delete_transaction(transaction_id: str, current_user: dict = Depends(g
         if transaction.get("transfer_to_account_id"):
             await update_account_balance(transaction["transfer_to_account_id"], transaction["amount"], "subtract")
     
-    result = transactions_collection.delete_one({"_id": ObjectId(transaction_id)})
-    if result.deleted_count == 1:
+    success = await transaction_repository.delete_by_id(transaction_id)
+    if success:
         return {"message": "Transaction deleted successfully"}
     
     raise HTTPException(

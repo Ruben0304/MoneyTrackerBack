@@ -3,7 +3,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-from routes import auth, users, accounts, transactions, budgets, categories, chat, income_presets, expense_presets, auto_savings
+from routes import auth, users, accounts, transactions, budgets, categories, chat, income_presets, expense_presets
 
 load_dotenv()
 
@@ -34,7 +34,7 @@ app.include_router(categories.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
 app.include_router(income_presets.router, prefix="/api/income-presets", tags=["Income Presets"])
 app.include_router(expense_presets.router, prefix="/api/expense-presets", tags=["Expense Presets"])
-app.include_router(auto_savings.router, prefix="/api/auto-savings", tags=["Auto Savings"])
+# app.include_router(auto_savings.router, prefix="/api/auto-savings", tags=["Auto Savings"]) # Omitted as requested
 
 @app.get("/")
 def read_root():

@@ -7,10 +7,9 @@ from models import (
     ExpensePreset, ExpensePresetCreate, ExpensePresetUpdate,
     TransactionCreate, Transaction
 )
-from database import (
-    expense_presets_collection, transactions_collection, 
-    accounts_collection
-)
+from repositories.expense_preset_repository import expense_preset_repository
+from repositories.transaction_repository import transaction_repository
+from repositories.account_repository import account_repository
 from auth import get_current_user
 
 router = APIRouter()
@@ -25,9 +24,9 @@ async def create_expense_preset(
     expense_preset_dict["created_at"] = datetime.utcnow()
     expense_preset_dict["updated_at"] = datetime.utcnow()
     
-    result = expense_presets_collection.insert_one(expense_preset_dict)
+    preset_id = await expense_preset_repository.create(expense_preset_dict)
     
-    created_preset = expense_presets_collection.find_one({"_id": result.inserted_id})
+    created_preset = await expense_preset_repository.find_by_id(preset_id)
     created_preset["id"] = str(created_preset["_id"])
     created_preset.pop("_id")
     
@@ -35,7 +34,7 @@ async def create_expense_preset(
 
 @router.get("/", response_model=dict)
 async def get_expense_presets(current_user: dict = Depends(get_current_user)):
-    presets = list(expense_presets_collection.find({"user_id": str(current_user["_id"])}))
+    presets = await expense_preset_repository.find_by_user_id(str(current_user["_id"]))
     
     for preset in presets:
         preset["id"] = str(preset["_id"])
@@ -51,7 +50,7 @@ async def get_expense_preset(
     if not ObjectId.is_valid(preset_id):
         raise HTTPException(status_code=400, detail="Invalid preset ID")
     
-    preset = expense_presets_collection.find_one({
+    preset = await expense_preset_repository.find_one_by_filter({
         "_id": ObjectId(preset_id),
         "user_id": str(current_user["_id"])
     })
@@ -79,13 +78,16 @@ async def update_expense_preset(
     
     update_data["updated_at"] = datetime.utcnow()
     
-    result = expense_presets_collection.update_one(
-        {"_id": ObjectId(preset_id), "user_id": str(current_user["_id"])},
-        {"$set": update_data}
-    )
+    # Check if preset exists and belongs to user
+    existing_preset = await expense_preset_repository.find_one_by_filter({
+        "_id": ObjectId(preset_id), 
+        "user_id": str(current_user["_id"])
+    })
     
-    if result.matched_count == 0:
+    if not existing_preset:
         raise HTTPException(status_code=404, detail="Expense preset not found")
+    
+    await expense_preset_repository.update_by_id(preset_id, update_data)
     
     return {"message": "Expense preset updated successfully"}
 
@@ -97,13 +99,16 @@ async def delete_expense_preset(
     if not ObjectId.is_valid(preset_id):
         raise HTTPException(status_code=400, detail="Invalid preset ID")
     
-    result = expense_presets_collection.delete_one({
-        "_id": ObjectId(preset_id),
+    # Check if preset exists and belongs to user
+    existing_preset = await expense_preset_repository.find_one_by_filter({
+        "_id": ObjectId(preset_id), 
         "user_id": str(current_user["_id"])
     })
     
-    if result.deleted_count == 0:
+    if not existing_preset:
         raise HTTPException(status_code=404, detail="Expense preset not found")
+    
+    await expense_preset_repository.delete_by_id(preset_id)
     
     return {"message": "Expense preset deleted successfully"}
 
@@ -115,7 +120,7 @@ async def use_expense_preset(
     if not ObjectId.is_valid(preset_id):
         raise HTTPException(status_code=400, detail="Invalid preset ID")
     
-    preset = expense_presets_collection.find_one({
+    preset = await expense_preset_repository.find_one_by_filter({
         "_id": ObjectId(preset_id),
         "user_id": str(current_user["_id"])
     })
@@ -126,7 +131,7 @@ async def use_expense_preset(
     if not preset.get("is_active", True):
         raise HTTPException(status_code=400, detail="Expense preset is not active")
     
-    account = accounts_collection.find_one({
+    account = await account_repository.find_one_by_filter({
         "_id": ObjectId(preset["account_id"]),
         "user_id": str(current_user["_id"])
     })
@@ -150,15 +155,15 @@ async def use_expense_preset(
     transaction_dict["date"] = datetime.utcnow()
     transaction_dict["currency"] = preset["currency"]
     
-    result = transactions_collection.insert_one(transaction_dict)
+    transaction_id = await transaction_repository.create(transaction_dict)
     
     new_balance = account["balance"] - preset["amount"]
-    accounts_collection.update_one(
-        {"_id": ObjectId(preset["account_id"])},
-        {"$set": {"balance": new_balance, "updated_at": datetime.utcnow()}}
-    )
+    await account_repository.update_by_id(preset["account_id"], {
+        "balance": new_balance, 
+        "updated_at": datetime.utcnow()
+    })
     
-    created_transaction = transactions_collection.find_one({"_id": result.inserted_id})
+    created_transaction = await transaction_repository.find_by_id(transaction_id)
     created_transaction["id"] = str(created_transaction["_id"])
     created_transaction.pop("_id")
     

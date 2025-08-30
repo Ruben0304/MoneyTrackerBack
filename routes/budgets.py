@@ -1,7 +1,8 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 from typing import List
 from models import Budget, BudgetCreate, BudgetUpdate
-from database import budgets_collection, accounts_collection
+from repositories.budget_repository import budget_repository
+from repositories.account_repository import account_repository
 from auth import get_current_active_user
 from bson import ObjectId
 from datetime import datetime
@@ -27,7 +28,7 @@ def budget_helper(budget) -> dict:
 async def create_budget(budget: BudgetCreate, current_user: dict = Depends(get_current_active_user)):
     # Verify source account exists and belongs to user
     user_id = str(current_user["_id"])
-    account = accounts_collection.find_one({"_id": ObjectId(budget.source_account_id), "user_id": user_id})
+    account = await account_repository.find_one_by_filter({"_id": ObjectId(budget.source_account_id), "user_id": user_id})
     if not account:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -47,18 +48,16 @@ async def create_budget(budget: BudgetCreate, current_user: dict = Depends(get_c
         "is_completed": False
     }
     
-    result = budgets_collection.insert_one(budget_dict)
-    new_budget = budgets_collection.find_one({"_id": result.inserted_id})
+    budget_id = await budget_repository.create(budget_dict)
+    new_budget = await budget_repository.find_by_id(budget_id)
     return budget_helper(new_budget)
 
 @router.get("/", response_model=List[dict])
 async def get_user_budgets(current_user: dict = Depends(get_current_active_user)):
     """Get all budgets for the authenticated user"""
     user_id = str(current_user["_id"])
-    budgets = []
-    for budget in budgets_collection.find({"user_id": user_id}):
-        budgets.append(budget_helper(budget))
-    return budgets
+    budgets = await budget_repository.find_by_user_id(user_id)
+    return [budget_helper(budget) for budget in budgets]
 
 @router.get("/{budget_id}")
 async def get_budget(budget_id: str, current_user: dict = Depends(get_current_active_user)):
@@ -68,7 +67,7 @@ async def get_budget(budget_id: str, current_user: dict = Depends(get_current_ac
             detail="Invalid budget ID"
         )
     
-    budget = budgets_collection.find_one({"_id": ObjectId(budget_id), "user_id": str(current_user["_id"])})
+    budget = await budget_repository.find_one_by_filter({"_id": ObjectId(budget_id), "user_id": str(current_user["_id"])})
     if budget:
         return budget_helper(budget)
     raise HTTPException(
@@ -86,7 +85,7 @@ async def update_budget(budget_id: str, budget_update: BudgetUpdate, current_use
     
     # Verify budget belongs to user
     user_id = str(current_user["_id"])
-    existing_budget = budgets_collection.find_one({"_id": ObjectId(budget_id), "user_id": user_id})
+    existing_budget = await budget_repository.find_one_by_filter({"_id": ObjectId(budget_id), "user_id": user_id})
     if not existing_budget:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -103,13 +102,10 @@ async def update_budget(budget_id: str, budget_update: BudgetUpdate, current_use
         if current_amount >= target_amount:
             update_data["is_completed"] = True
     
-    result = budgets_collection.update_one(
-        {"_id": ObjectId(budget_id)}, 
-        {"$set": update_data}
-    )
+    success = await budget_repository.update_by_id(budget_id, update_data)
     
-    if result.modified_count == 1:
-        updated_budget = budgets_collection.find_one({"_id": ObjectId(budget_id)})
+    if success:
+        updated_budget = await budget_repository.find_by_id(budget_id)
         return budget_helper(updated_budget)
     
     raise HTTPException(
@@ -126,7 +122,7 @@ async def add_funds_to_budget(budget_id: str, amount: float, current_user: dict 
         )
     
     user_id = str(current_user["_id"])
-    budget = budgets_collection.find_one({"_id": ObjectId(budget_id), "user_id": user_id})
+    budget = await budget_repository.find_one_by_filter({"_id": ObjectId(budget_id), "user_id": user_id})
     if not budget:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -134,7 +130,7 @@ async def add_funds_to_budget(budget_id: str, amount: float, current_user: dict 
         )
     
     # Verify source account has sufficient balance
-    account = accounts_collection.find_one({"_id": ObjectId(budget["source_account_id"])})
+    account = await account_repository.find_by_id(budget["source_account_id"])
     if account["balance"] < amount:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -145,23 +141,16 @@ async def add_funds_to_budget(budget_id: str, amount: float, current_user: dict 
     new_current_amount = budget["current_amount"] + amount
     is_completed = new_current_amount >= budget["target_amount"]
     
-    accounts_collection.update_one(
-        {"_id": ObjectId(budget["source_account_id"])},
-        {"$inc": {"balance": -amount}, "$set": {"updated_at": datetime.utcnow()}}
-    )
+    await account_repository.increment_balance(budget["source_account_id"], -amount)
+    await account_repository.update_by_id(budget["source_account_id"], {"updated_at": datetime.utcnow()})
     
-    budgets_collection.update_one(
-        {"_id": ObjectId(budget_id)},
-        {
-            "$set": {
-                "current_amount": new_current_amount,
-                "is_completed": is_completed,
-                "updated_at": datetime.utcnow()
-            }
-        }
-    )
+    await budget_repository.update_by_id(budget_id, {
+        "current_amount": new_current_amount,
+        "is_completed": is_completed,
+        "updated_at": datetime.utcnow()
+    })
     
-    updated_budget = budgets_collection.find_one({"_id": ObjectId(budget_id)})
+    updated_budget = await budget_repository.find_by_id(budget_id)
     return budget_helper(updated_budget)
 
 @router.delete("/{budget_id}")
@@ -172,8 +161,17 @@ async def delete_budget(budget_id: str, current_user: dict = Depends(get_current
             detail="Invalid budget ID"
         )
     
-    result = budgets_collection.delete_one({"_id": ObjectId(budget_id), "user_id": str(current_user["_id"])})
-    if result.deleted_count == 1:
+    # Verify budget belongs to user before deleting
+    user_id = str(current_user["_id"])
+    existing_budget = await budget_repository.find_one_by_filter({"_id": ObjectId(budget_id), "user_id": user_id})
+    if not existing_budget:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Budget not found"
+        )
+    
+    success = await budget_repository.delete_by_id(budget_id)
+    if success:
         return {"message": "Budget deleted successfully"}
     
     raise HTTPException(

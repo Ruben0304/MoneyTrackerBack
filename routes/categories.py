@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, status
 from typing import List
 from models import Category
-from database import categories_collection
+from repositories.category_repository import category_repository
 from bson import ObjectId
 
 router = APIRouter(prefix="/categories", tags=["categories"])
@@ -17,24 +17,18 @@ def category_helper(category) -> dict:
 
 @router.get("/", response_model=List[dict])
 async def get_all_categories():
-    categories = []
-    for category in categories_collection.find():
-        categories.append(category_helper(category))
-    return categories
+    categories = await category_repository.find_all()
+    return [category_helper(category) for category in categories]
 
 @router.get("/expense", response_model=List[dict])
 async def get_expense_categories():
-    categories = []
-    for category in categories_collection.find({"type": "expense"}):
-        categories.append(category_helper(category))
-    return categories
+    categories = await category_repository.find_by_type("expense")
+    return [category_helper(category) for category in categories]
 
 @router.get("/income", response_model=List[dict])
 async def get_income_categories():
-    categories = []
-    for category in categories_collection.find({"type": "income"}):
-        categories.append(category_helper(category))
-    return categories
+    categories = await category_repository.find_by_type("income")
+    return [category_helper(category) for category in categories]
 
 @router.get("/{category_id}")
 async def get_category(category_id: str):
@@ -44,7 +38,7 @@ async def get_category(category_id: str):
             detail="Invalid category ID"
         )
     
-    category = categories_collection.find_one({"_id": ObjectId(category_id)})
+    category = await category_repository.find_by_id(category_id)
     if category:
         return category_helper(category)
     raise HTTPException(
@@ -55,7 +49,7 @@ async def get_category(category_id: str):
 @router.post("/", response_model=dict)
 async def create_category(category: Category):
     # Check if category with same name already exists
-    existing = categories_collection.find_one({"name": category.name, "type": category.type})
+    existing = await category_repository.find_one_by_filter({"name": category.name, "type": category.type})
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -69,8 +63,8 @@ async def create_category(category: Category):
         "type": category.type
     }
     
-    result = categories_collection.insert_one(category_dict)
-    new_category = categories_collection.find_one({"_id": result.inserted_id})
+    category_id = await category_repository.create(category_dict)
+    new_category = await category_repository.find_by_id(category_id)
     return category_helper(new_category)
 
 @router.put("/{category_id}")
@@ -81,13 +75,10 @@ async def update_category(category_id: str, category_update: dict):
             detail="Invalid category ID"
         )
     
-    result = categories_collection.update_one(
-        {"_id": ObjectId(category_id)}, 
-        {"$set": category_update}
-    )
+    success = await category_repository.update_by_id(category_id, category_update)
     
-    if result.modified_count == 1:
-        updated_category = categories_collection.find_one({"_id": ObjectId(category_id)})
+    if success:
+        updated_category = await category_repository.find_by_id(category_id)
         return category_helper(updated_category)
     
     raise HTTPException(
@@ -103,8 +94,8 @@ async def delete_category(category_id: str):
             detail="Invalid category ID"
         )
     
-    result = categories_collection.delete_one({"_id": ObjectId(category_id)})
-    if result.deleted_count == 1:
+    success = await category_repository.delete_by_id(category_id)
+    if success:
         return {"message": "Category deleted successfully"}
     
     raise HTTPException(
