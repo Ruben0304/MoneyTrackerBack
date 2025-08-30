@@ -28,3 +28,5 @@ class TransactionCreate(BaseModel):
     category: str
     description: str
     transfer_to_account_id: Optional[str] = None
+    auto_savings_percentage: Optional[float] = None
+    auto_savings_account_id: Optional[str] = None

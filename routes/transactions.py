@@ -58,6 +58,58 @@ async def create_transaction(transaction: TransactionCreate, current_user: dict 
     # Handle different transaction types
     if transaction.type == "income":
         await update_account_balance(transaction.account_id, transaction.amount, "add")
+        
+        # Handle auto-savings for income transactions
+        if (transaction.auto_savings_percentage is not None and 
+            transaction.auto_savings_account_id is not None and
+            transaction.auto_savings_percentage > 0):
+            
+            # Validate savings account exists and belongs to user
+            savings_account = await account_repository.find_one_by_filter({
+                "_id": ObjectId(transaction.auto_savings_account_id), 
+                "user_id": user_id
+            })
+            if not savings_account:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Savings account not found or doesn't belong to user"
+                )
+            
+            # Calculate savings amount
+            savings_amount = transaction.amount * (transaction.auto_savings_percentage / 100)
+            
+            # Check if there's enough balance in the income account after the income
+            income_account_new_balance = account["balance"] + transaction.amount
+            if income_account_new_balance < savings_amount:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Insufficient balance for auto-savings transfer"
+                )
+            
+            # Verify accounts have the same currency
+            if account["currency"] != savings_account["currency"]:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Cannot transfer auto-savings between different currencies"
+                )
+            
+            # Transfer the savings amount
+            await update_account_balance(transaction.account_id, savings_amount, "subtract")
+            await update_account_balance(transaction.auto_savings_account_id, savings_amount, "add")
+            
+            # Create a separate transaction record for the auto-savings transfer
+            auto_savings_transaction = {
+                "user_id": user_id,
+                "account_id": transaction.account_id,
+                "amount": savings_amount,
+                "type": "transfer",
+                "category": "Auto Savings",
+                "description": f"Auto savings ({transaction.auto_savings_percentage}%) from: {transaction.description}",
+                "date": datetime.utcnow(),
+                "currency": account["currency"],
+                "transfer_to_account_id": transaction.auto_savings_account_id
+            }
+            await transaction_repository.create(auto_savings_transaction)
     elif transaction.type == "expense":
         if account["balance"] < transaction.amount:
             raise HTTPException(
